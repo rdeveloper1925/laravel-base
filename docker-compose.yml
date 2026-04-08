@@ -1,0 +1,85 @@
+services:
+    web:
+        container_name: web-production
+        build:
+            context: .
+            dockerfile: ./docker/production/nginx/Dockerfile
+            additional_contexts:
+                app: service:php-fpm
+        restart: unless-stopped
+        volumes:
+            - laravel-storage-production:/var/www/storage:ro
+            - laravel-public-assets:/var/www/public/build:ro
+        networks:
+            - laravel-production
+        ports:
+            - "${NGINX_PORT:-8011}:80"
+        depends_on:
+            php-fpm:
+                condition: service_healthy
+
+    php-fpm:
+        container_name: php-fpm-production
+        build:
+            context: .
+            dockerfile: ./docker/common/php-fpm/Dockerfile
+            target: production
+            args:
+                # Google mirror of library/php — avoids Docker Hub auth (504) flakes; set PHP_BASE_IMAGE=php:8.4-fpm to use Hub
+                PHP_BASE_IMAGE: ${PHP_BASE_IMAGE:-mirror.gcr.io/library/php:8.4-fpm}
+        restart: unless-stopped
+        volumes:
+            - laravel-public-assets:/var/www/public/build
+            - laravel-storage-production:/var/www/storage
+        env_file:
+            - .env
+        networks:
+            - laravel-production
+        healthcheck:
+            test: ['CMD-SHELL', 'php-fpm-healthcheck || exit 1']
+            interval: 10s
+            timeout: 5s
+            retries: 3
+        depends_on:
+            postgres:
+                condition: service_healthy
+
+    postgres:
+        container_name: postgres-production
+        image: postgres:16
+        restart: unless-stopped
+        ports:
+            - "${POSTGRES_PORT:-8012}:5432"
+        environment:
+            POSTGRES_DB: '${DB_DATABASE:-app}'
+            POSTGRES_USER: '${DB_USERNAME:-laravel}'
+            POSTGRES_PASSWORD: '${DB_PASSWORD:-secret}'
+        volumes:
+            - postgres-data-production:/var/lib/postgresql/data
+        networks:
+            - laravel-production
+        healthcheck:
+            test: ['CMD', 'pg_isready']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    redis:
+        container_name: redis-production
+        image: redis:alpine
+        restart: unless-stopped
+        networks:
+            - laravel-production
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 10s
+            timeout: 5s
+            retries: 3
+
+networks:
+    laravel-production:
+
+volumes:
+    postgres-data-production:
+    laravel-storage-production:
+    laravel-public-assets:
