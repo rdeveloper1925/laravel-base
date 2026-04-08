@@ -19,7 +19,7 @@ services:
                 condition: service_healthy
 
     php-fpm:
-        container_name: php-fpm-production
+        container_name: app-production
         build:
             context: .
             dockerfile: ./docker/common/php-fpm/Dockerfile
@@ -33,6 +33,11 @@ services:
             - laravel-storage-production:/var/www/storage
         env_file:
             - .env
+        # Inside the container, 127.0.0.1 is PHP itself — use Compose service hostnames.
+        environment:
+            DB_HOST: mysql
+            DB_PORT: '3306'
+            REDIS_HOST: redis
         networks:
             - laravel-production
         healthcheck:
@@ -41,25 +46,26 @@ services:
             timeout: 5s
             retries: 3
         depends_on:
-            postgres:
+            mysql:
                 condition: service_healthy
 
-    postgres:
-        container_name: postgres-production
-        image: postgres:16
+    mysql:
+        container_name: mysql-production
+        image: mysql:8.4
         restart: unless-stopped
         ports:
-            - "${POSTGRES_PORT:-8012}:5432"
+            - "${MYSQL_PORT:-8012}:3306"
         environment:
-            POSTGRES_DB: '${DB_DATABASE:-app}'
-            POSTGRES_USER: '${DB_USERNAME:-laravel}'
-            POSTGRES_PASSWORD: '${DB_PASSWORD:-secret}'
+            MYSQL_DATABASE: '${DB_DATABASE:-app}'
+            MYSQL_USER: '${DB_USERNAME:-laravel}'
+            MYSQL_PASSWORD: '${DB_PASSWORD:-secret}'
+            MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD:-secret}'
         volumes:
-            - postgres-data-production:/var/lib/postgresql/data
+            - mysql-data-production:/var/lib/mysql
         networks:
             - laravel-production
         healthcheck:
-            test: ['CMD', 'pg_isready']
+            test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
             interval: 10s
             timeout: 5s
             retries: 5
@@ -80,6 +86,6 @@ networks:
     laravel-production:
 
 volumes:
-    postgres-data-production:
+    mysql-data-production:
     laravel-storage-production:
     laravel-public-assets:

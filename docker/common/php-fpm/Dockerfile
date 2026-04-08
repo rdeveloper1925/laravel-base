@@ -4,12 +4,11 @@ ARG PHP_BASE_IMAGE=php:8.4-fpm
 # Stage 1: Build environment and Composer dependencies
 FROM ${PHP_BASE_IMAGE} AS builder
 
-# Install system dependencies and PHP extensions required for Laravel + MySQL/PostgreSQL support
+# Install system dependencies and PHP extensions required for Laravel + MySQL
 # Some dependencies are required for PHP extensions only in the build stage
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
-    libpq-dev \
     libonig-dev \
     libssl-dev \
     libxml2-dev \
@@ -18,8 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libzip-dev \
     && docker-php-ext-install -j$(nproc) \
     pdo_mysql \
-    pdo_pgsql \
-    pgsql \
     intl \
     zip \
     bcmath \
@@ -61,7 +58,6 @@ RUN npm ci && npm run build && rm -f .env
 FROM ${PHP_BASE_IMAGE} AS production
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
     libicu-dev \
     libzip-dev \
     libfcgi-bin \
