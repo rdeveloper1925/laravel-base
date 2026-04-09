@@ -1,8 +1,9 @@
-# Override via build-arg (e.g. mirror when Docker Hub auth returns 504)
-ARG PHP_BASE_IMAGE=php:8.4-fpm
+# Declared before any FROM so both are valid in FROM lines (see Docker ARG/FROM interaction).
+ARG PHP_BUILD_IMAGE=php:8.4-cli
+ARG PHP_RUNTIME_IMAGE=php:8.4-apache
 
-# Stage 1: Build environment and Composer dependencies
-FROM ${PHP_BASE_IMAGE} AS builder
+# Stage 1: Build environment and Composer dependencies (CLI image is lighter than FPM).
+FROM ${PHP_BUILD_IMAGE} AS builder
 
 # Install system dependencies and PHP extensions required for Laravel + MySQL
 # Some dependencies are required for PHP extensions only in the build stage
@@ -54,23 +55,22 @@ RUN cp .env.example .env \
 
 RUN npm ci && npm run build && rm -f .env
 
-# Stage 2: Production environment
-FROM ${PHP_BASE_IMAGE} AS production
+# Stage 2: Production — Apache + mod_php (single HTTP process, no nginx reverse proxy)
+FROM ${PHP_RUNTIME_IMAGE} AS production
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libicu-dev \
     libzip-dev \
-    libfcgi-bin \
     nano \
     procps \
+    curl \
     && apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-RUN curl -o /usr/local/bin/php-fpm-healthcheck \
-    https://raw.githubusercontent.com/renatomefi/php-fpm-healthcheck/master/php-fpm-healthcheck \
-    && chmod +x /usr/local/bin/php-fpm-healthcheck
 
 COPY ./docker/production/php-fpm/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+COPY ./docker/production/apache/000-default.conf /etc/apache2/sites-available/000-default.conf
+RUN a2enmod rewrite
 
 COPY ./storage /var/www/storage-init
 
@@ -80,8 +80,6 @@ COPY --from=builder /usr/local/bin/docker-php-ext-* /usr/local/bin/
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-COPY ./docker/common/php-fpm/conf.d/*.conf /usr/local/etc/php-fpm.d/
-
 COPY --from=builder /var/www /var/www
 
 COPY --from=assets /var/www/public/build /var/www/public/build
@@ -90,9 +88,11 @@ WORKDIR /var/www
 
 RUN chown -R www-data:www-data /var/www
 
-USER www-data
-
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-EXPOSE 9000
-CMD ["php-fpm"]
+EXPOSE 80
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD curl -fsS http://127.0.0.1/ >/dev/null || exit 1
+
+CMD ["apache2-foreground"]
