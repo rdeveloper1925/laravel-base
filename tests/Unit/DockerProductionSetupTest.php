@@ -12,9 +12,7 @@ class DockerProductionSetupTest extends TestCase
         $this->assertFileExists($root.'/docker-compose.yml');
         $this->assertFileExists($root.'/.dockerignore');
         $this->assertFileExists($root.'/docker/common/php-fpm/Dockerfile');
-        $this->assertFileExists($root.'/docker/common/php-fpm/conf.d/20-status-path.conf');
         $this->assertFileExists($root.'/docker/production/php-fpm/entrypoint.sh');
-        $this->assertFileExists($root.'/docker/production/nginx/Dockerfile');
-        $this->assertFileExists($root.'/docker/production/nginx/nginx.conf');
+        $this->assertFileExists($root.'/docker/production/apache/000-default.conf');
     }
 }
